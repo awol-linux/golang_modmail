@@ -20,6 +20,10 @@ VALUES ($1, TRUE);
 UPDATE tickets
 SET channel_id = $1
 WHERE id = $2;
+-- name: CloseTicket :exec
+UPDATE tickets
+SET is_open = FALSE
+WHERE channel_id = $1;
 -- name: GetMessages :many
 SELECT messages.sender,
     messages.ticket_id,

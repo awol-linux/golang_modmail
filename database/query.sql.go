@@ -54,6 +54,17 @@ func (q *Queries) AddTicket(ctx context.Context, requester int64) error {
 	return err
 }
 
+const closeTicket = `-- name: CloseTicket :exec
+UPDATE tickets
+SET is_open = FALSE
+WHERE channel_id = $1
+`
+
+func (q *Queries) CloseTicket(ctx context.Context, channelID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, closeTicket, channelID)
+	return err
+}
+
 const getAllTickets = `-- name: GetAllTickets :many
 SELECT tickets.channel_id,
     tickets.requester,
