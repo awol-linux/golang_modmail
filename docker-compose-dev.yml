@@ -1,0 +1,21 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:latest
+    restart: always
+    ports:
+      - 8432:5432
+    environment:
+      POSTGRES_DB: khong
+      POSTGRES_USER: khong
+      POSTGRES_PASSWORD: khongpass
+  local:
+    build: 
+        context: .
+        dockerfile: DevDockerfile
+    volumes: 
+      - .:/app
+    depends_on: 
+      - db
+
+    

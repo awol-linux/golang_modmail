@@ -1,0 +1,15 @@
+{
+    "go.inferGopath": false,
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 8432,
+            "driver": "PostgreSQL",
+            "name": "golang_modmai",
+            "username": "khong",
+            "password": "khongpass",
+            "database": "khong"
+        }
+    ]
+}
