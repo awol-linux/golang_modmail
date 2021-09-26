@@ -40,7 +40,9 @@ func runBot(bot *discordgo.Session) {
 	defer db.Close()
 	messages := listeners.Listeners{DB: session}
 	bot.AddHandler(messages.MessageCreate)
+	bot.AddHandler(messages.MessageDelete)
 	bot.AddHandler(messages.MessageReact)
+	bot.AddHandler(messages.UnMessageReact)
 
 	err = bot.Open()
 	if err != nil {

@@ -18,6 +18,7 @@ type Message struct {
 	MessageID   int64
 	ChannelID   int64
 	Forwarded   sql.NullInt64
+	Deleted     bool
 }
 
 type Ticket struct {

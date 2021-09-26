@@ -61,6 +61,10 @@ WHERE MESSAGES.TICKET_ID = TICKETS.ID
         messages.message_id = $1
         OR forwarded.sendto_message_id = $1
     );
+-- name: DeleteMessage :exec
+UPDATE messages
+SET deleted = $1
+WHERE message_id = $2;
 -- name: AddMessage :exec
 INSERT INTO messages (
         sender,

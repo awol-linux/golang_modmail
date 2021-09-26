@@ -5,13 +5,11 @@ CREATE TABLE tickets (
    is_open BOOLEAN DEFAULT TRUE,
    PRIMARY KEY (id)
 );
-
 CREATE TABLE forwarded (
    sendto_message_id BIGINT NOT NULL,
    sendto_channel_id BIGINT NOT NULL,
    PRIMARY KEY (sendto_message_id)
 );
-
 CREATE TABLE messages (
    sender BIGINT NOT NULL,
    ticket_id BIGINT NOT NULL REFERENCES tickets (id),
@@ -19,5 +17,6 @@ CREATE TABLE messages (
    message_id BIGINT NOT NULL,
    channel_id BIGINT NOT NULL,
    forwarded BIGINT REFERENCES forwarded (sendto_message_id),
+   deleted BOOLEAN DEFAULT FALSE NOT NULL,
    PRIMARY KEY (message_id)
 );

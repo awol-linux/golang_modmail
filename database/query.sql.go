@@ -65,6 +65,22 @@ func (q *Queries) CloseTicket(ctx context.Context, ticketChannelID sql.NullInt64
 	return err
 }
 
+const deleteMessage = `-- name: DeleteMessage :exec
+UPDATE messages
+SET deleted = $1
+WHERE message_id = $2
+`
+
+type DeleteMessageParams struct {
+	Deleted   bool
+	MessageID int64
+}
+
+func (q *Queries) DeleteMessage(ctx context.Context, arg DeleteMessageParams) error {
+	_, err := q.db.ExecContext(ctx, deleteMessage, arg.Deleted, arg.MessageID)
+	return err
+}
+
 const getAllTickets = `-- name: GetAllTickets :many
 SELECT tickets.ticket_channel_id,
     tickets.requester,
@@ -107,7 +123,8 @@ func (q *Queries) GetAllTickets(ctx context.Context, requester int64) ([]GetAllT
 const getForwarded = `-- name: GetForwarded :one
 SELECT forwarded.sendto_channel_id,
     forwarded.sendto_message_id
-FROM forwarded, messages
+FROM forwarded,
+    messages
 WHERE messages.message_id = $1
 `
 
@@ -125,21 +142,24 @@ func (q *Queries) GetForwarded(ctx context.Context, messageID int64) (GetForward
 
 const getMessage = `-- name: GetMessage :one
 SELECT MESSAGES.SENDER,
-	MESSAGES.TICKET_ID, 
-	MESSAGES.MESSAGE_TEXT,
-	MESSAGES.MESSAGE_ID,
-	MESSAGES.CHANNEL_ID,
-	TICKETS.ticket_channel_id,
-	TICKETS.REQUESTER,
-	TICKETS.ID,
-	FORWARDED.sendto_channel_id,
-	FORWARDED.sendto_message_id
+    MESSAGES.TICKET_ID,
+    MESSAGES.MESSAGE_TEXT,
+    MESSAGES.MESSAGE_ID,
+    MESSAGES.CHANNEL_ID,
+    TICKETS.ticket_channel_id,
+    TICKETS.REQUESTER,
+    TICKETS.ID,
+    FORWARDED.sendto_channel_id,
+    FORWARDED.sendto_message_id
 FROM MESSAGES,
-	TICKETS,
-	FORWARDED
+    TICKETS,
+    FORWARDED
 WHERE MESSAGES.TICKET_ID = TICKETS.ID
-	AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
-    AND (messages.message_id = $1 OR forwarded.sendto_message_id = $1)
+    AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
+    AND (
+        messages.message_id = $1
+        OR forwarded.sendto_message_id = $1
+    )
 `
 
 type GetMessageRow struct {
@@ -175,20 +195,20 @@ func (q *Queries) GetMessage(ctx context.Context, messageID int64) (GetMessageRo
 
 const getMessages = `-- name: GetMessages :many
 SELECT MESSAGES.SENDER,
-	MESSAGES.TICKET_ID, 
-	MESSAGES.MESSAGE_TEXT,
-	MESSAGES.MESSAGE_ID,
-	MESSAGES.CHANNEL_ID,
-	TICKETS.ticket_channel_id,
-	TICKETS.REQUESTER,
-	TICKETS.ID,
-	FORWARDED.sendto_channel_id,
-	FORWARDED.sendto_message_id
+    MESSAGES.TICKET_ID,
+    MESSAGES.MESSAGE_TEXT,
+    MESSAGES.MESSAGE_ID,
+    MESSAGES.CHANNEL_ID,
+    TICKETS.ticket_channel_id,
+    TICKETS.REQUESTER,
+    TICKETS.ID,
+    FORWARDED.sendto_channel_id,
+    FORWARDED.sendto_message_id
 FROM MESSAGES,
-	TICKETS,
-	FORWARDED
+    TICKETS,
+    FORWARDED
 WHERE MESSAGES.TICKET_ID = TICKETS.ID
-	AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
+    AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
     AND ticket.id = $1
 `
 

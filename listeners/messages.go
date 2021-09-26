@@ -20,6 +20,38 @@ type Listeners struct {
 	DB *database.Queries
 }
 
+func (l *Listeners) MessageDelete(bot *discordgo.Session, message *discordgo.MessageDelete) {
+	messageId, err := strconv.ParseInt(message.ID, 10, 64)
+	if err != nil {
+		log.Printf("Failed convert messageID to bot: %v", err)
+		return
+	}
+	msg, err := l.DB.GetMessage(context.Background(), messageId)
+	if err != nil {
+		log.Printf("Failed to get message from DB: %v", err)
+		return
+	}
+	if messageId == msg.SendtoMessageID {
+		return
+	}
+	deleteData := database.DeleteMessageParams{
+		Deleted:   true,
+		MessageID: messageId,
+	}
+	err = l.DB.DeleteMessage(context.Background(), deleteData)
+	if err != nil {
+		log.Printf("Failed to delete message from DB: %v", err)
+		return
+	}
+	channel, sendto, _ := l.getChannels(bot, msg, message.ID)
+
+	err = bot.ChannelMessageDelete(channel, sendto)
+	if err != nil {
+		log.Printf("Failed to delete message: %v", err)
+		return
+	}
+}
+
 func (l *Listeners) MessageCreate(s *discordgo.Session, message *discordgo.MessageCreate) {
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
@@ -33,7 +65,7 @@ func (l *Listeners) MessageCreate(s *discordgo.Session, message *discordgo.Messa
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			fmt.Print("No tickets found, Creating new ticket\n")
-			ticket, err = l.NewTicket(
+			ticket, err = l.newTicket(
 				s, Requester,
 			)
 			if err != nil {
@@ -45,14 +77,14 @@ func (l *Listeners) MessageCreate(s *discordgo.Session, message *discordgo.Messa
 			return
 		}
 	}
-	forward, err := l.ForwardMessage(s, message, ticket)
+	forward, err := l.forwardMessage(s, message, ticket)
 	if err != nil {
 		log.Printf("Failed to forward message: %v", err)
 		return
 	}
 	ogmsgid, _ := strconv.ParseInt(message.ID, 10, 64)
 	frwrdid, _ := strconv.ParseInt(forward.ID, 10, 64)
-	frwrdchnlid, _ := strconv.ParseInt(message.ChannelID, 10, 64)
+	frwrdchnlid, _ := strconv.ParseInt(forward.ChannelID, 10, 64)
 	data := database.InsertForwardParams{
 		SendtoMessageID: frwrdid,
 		SendtoChannelID: frwrdchnlid,
@@ -75,7 +107,7 @@ func (l *Listeners) MessageCreate(s *discordgo.Session, message *discordgo.Messa
 	}
 }
 
-func (l *Listeners) ForwardMessage(bot *discordgo.Session, message *discordgo.MessageCreate, ticket database.GetOpenTicketRow) (*discordgo.Message, error) {
+func (l *Listeners) forwardMessage(bot *discordgo.Session, message *discordgo.MessageCreate, ticket database.GetOpenTicketRow) (*discordgo.Message, error) {
 	Sender, _ := strconv.ParseInt(message.Author.ID, 10, 64)
 	MessageText := message.Content
 	MessageID, _ := strconv.ParseInt(message.ID, 10, 64)
@@ -114,7 +146,8 @@ func (l *Listeners) ForwardMessage(bot *discordgo.Session, message *discordgo.Me
 	ret, err := bot.ChannelMessageSend(sendto.ID, MessageText)
 	return ret, err
 }
-func (l *Listeners) NewTicket(bot *discordgo.Session, Requester int64) (database.GetOpenTicketRow, error) {
+
+func (l *Listeners) newTicket(bot *discordgo.Session, Requester int64) (database.GetOpenTicketRow, error) {
 	err := l.DB.AddTicket(
 		context.Background(), Requester,
 	)
