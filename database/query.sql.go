@@ -57,16 +57,16 @@ func (q *Queries) AddTicket(ctx context.Context, requester int64) error {
 const closeTicket = `-- name: CloseTicket :exec
 UPDATE tickets
 SET is_open = FALSE
-WHERE channel_id = $1
+WHERE ticket_channel_id = $1
 `
 
-func (q *Queries) CloseTicket(ctx context.Context, channelID sql.NullInt64) error {
-	_, err := q.db.ExecContext(ctx, closeTicket, channelID)
+func (q *Queries) CloseTicket(ctx context.Context, ticketChannelID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, closeTicket, ticketChannelID)
 	return err
 }
 
 const getAllTickets = `-- name: GetAllTickets :many
-SELECT tickets.channel_id,
+SELECT tickets.ticket_channel_id,
     tickets.requester,
     tickets.id
 FROM messages,
@@ -76,9 +76,9 @@ WHERE tickets.requester = $1
 `
 
 type GetAllTicketsRow struct {
-	ChannelID sql.NullInt64
-	Requester int64
-	ID        int32
+	TicketChannelID sql.NullInt64
+	Requester       int64
+	ID              int32
 }
 
 func (q *Queries) GetAllTickets(ctx context.Context, requester int64) ([]GetAllTicketsRow, error) {
@@ -90,7 +90,7 @@ func (q *Queries) GetAllTickets(ctx context.Context, requester int64) ([]GetAllT
 	var items []GetAllTicketsRow
 	for rows.Next() {
 		var i GetAllTicketsRow
-		if err := rows.Scan(&i.ChannelID, &i.Requester, &i.ID); err != nil {
+		if err := rows.Scan(&i.TicketChannelID, &i.Requester, &i.ID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -104,30 +104,105 @@ func (q *Queries) GetAllTickets(ctx context.Context, requester int64) ([]GetAllT
 	return items, nil
 }
 
+const getForwarded = `-- name: GetForwarded :one
+SELECT forwarded.sendto_channel_id,
+    forwarded.sendto_message_id
+FROM forwarded, messages
+WHERE messages.message_id = $1
+`
+
+type GetForwardedRow struct {
+	SendtoChannelID int64
+	SendtoMessageID int64
+}
+
+func (q *Queries) GetForwarded(ctx context.Context, messageID int64) (GetForwardedRow, error) {
+	row := q.db.QueryRowContext(ctx, getForwarded, messageID)
+	var i GetForwardedRow
+	err := row.Scan(&i.SendtoChannelID, &i.SendtoMessageID)
+	return i, err
+}
+
+const getMessage = `-- name: GetMessage :one
+SELECT MESSAGES.SENDER,
+	MESSAGES.TICKET_ID, 
+	MESSAGES.MESSAGE_TEXT,
+	MESSAGES.MESSAGE_ID,
+	MESSAGES.CHANNEL_ID,
+	TICKETS.ticket_channel_id,
+	TICKETS.REQUESTER,
+	TICKETS.ID,
+	FORWARDED.sendto_channel_id,
+	FORWARDED.sendto_message_id
+FROM MESSAGES,
+	TICKETS,
+	FORWARDED
+WHERE MESSAGES.TICKET_ID = TICKETS.ID
+	AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
+    AND (messages.message_id = $1 OR forwarded.sendto_message_id = $1)
+`
+
+type GetMessageRow struct {
+	Sender          int64
+	TicketID        int64
+	MessageText     string
+	MessageID       int64
+	ChannelID       int64
+	TicketChannelID sql.NullInt64
+	Requester       int64
+	ID              int32
+	SendtoChannelID int64
+	SendtoMessageID int64
+}
+
+func (q *Queries) GetMessage(ctx context.Context, messageID int64) (GetMessageRow, error) {
+	row := q.db.QueryRowContext(ctx, getMessage, messageID)
+	var i GetMessageRow
+	err := row.Scan(
+		&i.Sender,
+		&i.TicketID,
+		&i.MessageText,
+		&i.MessageID,
+		&i.ChannelID,
+		&i.TicketChannelID,
+		&i.Requester,
+		&i.ID,
+		&i.SendtoChannelID,
+		&i.SendtoMessageID,
+	)
+	return i, err
+}
+
 const getMessages = `-- name: GetMessages :many
-SELECT messages.sender,
-    messages.ticket_id,
-    messages.message_text,
-    messages.message_id,
-    messages.channel_id,
-    tickets.channel_id,
-    tickets.requester,
-    tickets.id
-FROM messages,
-    tickets
-WHERE messages.ticket_id = tickets.id
+SELECT MESSAGES.SENDER,
+	MESSAGES.TICKET_ID, 
+	MESSAGES.MESSAGE_TEXT,
+	MESSAGES.MESSAGE_ID,
+	MESSAGES.CHANNEL_ID,
+	TICKETS.ticket_channel_id,
+	TICKETS.REQUESTER,
+	TICKETS.ID,
+	FORWARDED.sendto_channel_id,
+	FORWARDED.sendto_message_id
+FROM MESSAGES,
+	TICKETS,
+	FORWARDED
+WHERE MESSAGES.TICKET_ID = TICKETS.ID
+	AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
     AND ticket.id = $1
 `
 
 type GetMessagesRow struct {
-	Sender      int64
-	TicketID    int64
-	MessageText string
-	MessageID   int64
-	ChannelID   int64
-	ChannelID_2 sql.NullInt64
-	Requester   int64
-	ID          int32
+	Sender          int64
+	TicketID        int64
+	MessageText     string
+	MessageID       int64
+	ChannelID       int64
+	TicketChannelID sql.NullInt64
+	Requester       int64
+	ID              int32
+	SendtoChannelID int64
+	SendtoMessageID int64
 }
 
 func (q *Queries) GetMessages(ctx context.Context, id int32) ([]GetMessagesRow, error) {
@@ -145,9 +220,11 @@ func (q *Queries) GetMessages(ctx context.Context, id int32) ([]GetMessagesRow, 
 			&i.MessageText,
 			&i.MessageID,
 			&i.ChannelID,
-			&i.ChannelID_2,
+			&i.TicketChannelID,
 			&i.Requester,
 			&i.ID,
+			&i.SendtoChannelID,
+			&i.SendtoMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -163,7 +240,7 @@ func (q *Queries) GetMessages(ctx context.Context, id int32) ([]GetMessagesRow, 
 }
 
 const getOpenTicket = `-- name: GetOpenTicket :one
-SELECT channel_id,
+SELECT ticket_channel_id,
     requester,
     id
 FROM tickets
@@ -172,31 +249,62 @@ WHERE requester = $1
 `
 
 type GetOpenTicketRow struct {
-	ChannelID sql.NullInt64
-	Requester int64
-	ID        int32
+	TicketChannelID sql.NullInt64
+	Requester       int64
+	ID              int32
 }
 
 func (q *Queries) GetOpenTicket(ctx context.Context, requester int64) (GetOpenTicketRow, error) {
 	row := q.db.QueryRowContext(ctx, getOpenTicket, requester)
 	var i GetOpenTicketRow
-	err := row.Scan(&i.ChannelID, &i.Requester, &i.ID)
+	err := row.Scan(&i.TicketChannelID, &i.Requester, &i.ID)
 	return i, err
 }
 
 const insertChannel = `-- name: InsertChannel :exec
 UPDATE tickets
-SET channel_id = $1
+SET ticket_channel_id = $1
 WHERE id = $2
 `
 
 type InsertChannelParams struct {
-	ChannelID sql.NullInt64
-	ID        int32
+	TicketChannelID sql.NullInt64
+	ID              int32
 }
 
 func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) error {
-	_, err := q.db.ExecContext(ctx, insertChannel, arg.ChannelID, arg.ID)
+	_, err := q.db.ExecContext(ctx, insertChannel, arg.TicketChannelID, arg.ID)
+	return err
+}
+
+const insertForward = `-- name: InsertForward :exec
+INSERT INTO forwarded (sendto_message_id, sendto_channel_id)
+VALUES ($1, $2)
+`
+
+type InsertForwardParams struct {
+	SendtoMessageID int64
+	SendtoChannelID int64
+}
+
+func (q *Queries) InsertForward(ctx context.Context, arg InsertForwardParams) error {
+	_, err := q.db.ExecContext(ctx, insertForward, arg.SendtoMessageID, arg.SendtoChannelID)
+	return err
+}
+
+const linkForward = `-- name: LinkForward :exec
+UPDATE messages
+SET forwarded = $1
+WHERE message_id = $2
+`
+
+type LinkForwardParams struct {
+	Forwarded sql.NullInt64
+	MessageID int64
+}
+
+func (q *Queries) LinkForward(ctx context.Context, arg LinkForwardParams) error {
+	_, err := q.db.ExecContext(ctx, linkForward, arg.Forwarded, arg.MessageID)
 	return err
 }
 

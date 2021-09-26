@@ -9,6 +9,13 @@ services:
       POSTGRES_DB: khong
       POSTGRES_USER: khong
       POSTGRES_PASSWORD: khongpass
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    ports:
+      - 8080:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: test@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
   local:
     build: 
         context: .

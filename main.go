@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/awol/golang_modmail/database"
 	"github.com/awol/golang_modmail/listeners"
 	"github.com/bwmarrin/discordgo"
 	_ "github.com/lib/pq"
@@ -30,10 +31,18 @@ func main() {
 
 func runBot(bot *discordgo.Session) {
 	fmt.Printf("token is: %v\n", Token)
-	bot.AddHandler(listeners.MessageCreate)
+	bot.Identify.Intents = discordgo.IntentsAll
+	db, err := database.GetDB()
+	if err != nil {
+		log.Printf("failed to open connection to DB: %v", err)
+	}
+	session := database.New(db)
+	defer db.Close()
+	messages := listeners.Listeners{DB: session}
+	bot.AddHandler(messages.MessageCreate)
+	bot.AddHandler(messages.MessageReact)
 
-	bot.Identify.Intents = discordgo.IntentsDirectMessages + discordgo.IntentsGuildMessages
-	err := bot.Open()
+	err = bot.Open()
 	if err != nil {
 		fmt.Println("error opening connection,", err)
 		return

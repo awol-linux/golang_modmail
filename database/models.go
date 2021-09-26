@@ -6,17 +6,23 @@ import (
 	"database/sql"
 )
 
+type Forwarded struct {
+	SendtoMessageID int64
+	SendtoChannelID int64
+}
+
 type Message struct {
 	Sender      int64
 	TicketID    int64
 	MessageText string
 	MessageID   int64
 	ChannelID   int64
+	Forwarded   sql.NullInt64
 }
 
 type Ticket struct {
-	ID        int32
-	Requester int64
-	ChannelID sql.NullInt64
-	IsOpen    sql.NullBool
+	ID              int32
+	Requester       int64
+	TicketChannelID sql.NullInt64
+	IsOpen          sql.NullBool
 }

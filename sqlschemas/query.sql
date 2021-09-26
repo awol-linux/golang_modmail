@@ -1,12 +1,12 @@
 -- name: GetOpenTicket :one
-SELECT channel_id,
+SELECT ticket_channel_id,
     requester,
     id
 FROM tickets
 WHERE requester = $1
     AND is_open = TRUE;
 -- name: GetAllTickets :many
-SELECT tickets.channel_id,
+SELECT tickets.ticket_channel_id,
     tickets.requester,
     tickets.id
 FROM messages,
@@ -18,25 +18,49 @@ INSERT INTO tickets (requester, is_open)
 VALUES ($1, TRUE);
 -- name: InsertChannel :exec
 UPDATE tickets
-SET channel_id = $1
+SET ticket_channel_id = $1
 WHERE id = $2;
 -- name: CloseTicket :exec
 UPDATE tickets
 SET is_open = FALSE
-WHERE channel_id = $1;
+WHERE ticket_channel_id = $1;
 -- name: GetMessages :many
-SELECT messages.sender,
-    messages.ticket_id,
-    messages.message_text,
-    messages.message_id,
-    messages.channel_id,
-    tickets.channel_id,
-    tickets.requester,
-    tickets.id
-FROM messages,
-    tickets
-WHERE messages.ticket_id = tickets.id
+SELECT MESSAGES.SENDER,
+    MESSAGES.TICKET_ID,
+    MESSAGES.MESSAGE_TEXT,
+    MESSAGES.MESSAGE_ID,
+    MESSAGES.CHANNEL_ID,
+    TICKETS.ticket_channel_id,
+    TICKETS.REQUESTER,
+    TICKETS.ID,
+    FORWARDED.sendto_channel_id,
+    FORWARDED.sendto_message_id
+FROM MESSAGES,
+    TICKETS,
+    FORWARDED
+WHERE MESSAGES.TICKET_ID = TICKETS.ID
+    AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
     AND ticket.id = $1;
+-- name: GetMessage :one
+SELECT MESSAGES.SENDER,
+    MESSAGES.TICKET_ID,
+    MESSAGES.MESSAGE_TEXT,
+    MESSAGES.MESSAGE_ID,
+    MESSAGES.CHANNEL_ID,
+    TICKETS.ticket_channel_id,
+    TICKETS.REQUESTER,
+    TICKETS.ID,
+    FORWARDED.sendto_channel_id,
+    FORWARDED.sendto_message_id
+FROM MESSAGES,
+    TICKETS,
+    FORWARDED
+WHERE MESSAGES.TICKET_ID = TICKETS.ID
+    AND FORWARDED.sendto_message_id = MESSAGES.FORWARDED
+    AND (
+        messages.message_id = $1
+        OR forwarded.sendto_message_id = $1
+    );
 -- name: AddMessage :exec
 INSERT INTO messages (
         sender,
@@ -69,6 +93,20 @@ VALUES (
         12347,
         12347
     );
+-- name: InsertForward :exec
+INSERT INTO forwarded (sendto_message_id, sendto_channel_id)
+VALUES ($1, $2);
+-- name: LinkForward :exec
+UPDATE messages
+SET forwarded = $1
+WHERE message_id = $2;
+-- name: GetForwarded :one
+SELECT forwarded.sendto_channel_id,
+    forwarded.sendto_message_id
+FROM forwarded,
+    messages
+WHERE messages.message_id = $1;
 -- name: DropMessages :exec
 DROP TABLE messages,
-tickets;
+tickets,
+forwarded;
